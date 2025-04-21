@@ -26,12 +26,28 @@ def main():
 
         # QUBO定式化と解探索
         bqm = build_qubo(tasks, people, slots)
-        result = solve_qubo(bqm)
+        sampleset = solve_qubo(bqm)
+
+        # 最良サンプル取得
+        best = sampleset.first.sample
+        # スケジュールマッピング
+        schedule = []  # list of dicts for DataFrame
+        for (i, j, k), val in best.items():
+            if val == 1:
+                task_name = tasks[i][0]
+                person = people[j]
+                slot = k + 1
+                schedule.append({'タイムスロット': slot, '担当者': person, 'タスク': task_name})
 
         # 結果表示
         st.subheader('スケジュール結果')
-        # TODO: resultをパースしてテーブル表示
-        st.write(result)
+        if schedule:
+            import pandas as pd
+            df = pd.DataFrame(schedule)
+            st.table(df.sort_values(['タイムスロット', '担当者']))
+            st.success(f'最適解エネルギー: {sampleset.first.energy}')
+        else:
+            st.warning('有効なスケジュールが見つかりませんでした。')
 
 
 if __name__ == '__main__':

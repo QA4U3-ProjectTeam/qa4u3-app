@@ -33,6 +33,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## 仮想環境セットアップスクリプト
+
+- **Windows**:
+  ```bash
+  .\setup_env.bat
+  ```
+- **macOS/Linux**:
+  ```bash
+  ./setup_env.sh
+  ```
+
 ## 実行方法
 ```bash
 # Streamlitアプリを起動
