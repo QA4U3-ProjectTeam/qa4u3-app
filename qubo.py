@@ -32,11 +32,17 @@ def build_qubo(tasks, people, slots,
         # 二次項
         for v1, v2 in itertools.combinations(vars_i, 2):
             bqm.add_quadratic(v1, v2, 2 * penalty_task)
+        # 定数項（オフセット）
+        bqm.offset += penalty_task
 
-    # 同一担当者・同時刻は1タスク以下制約: B*(sum*(sum-1)) => 2B の二次項
+    # 同一担当者・同時刻は1タスク以下制約: B*sum*(sum-1) を sum^2 - sum で定式化
     for j in range(n_people):
         for k in range(slots):
             vars_jk = [(i, j, k) for i in range(n_tasks)]
+            # 線形項
+            for v in vars_jk:
+                bqm.add_linear(v, -penalty_overlap)
+            # 二次項
             for v1, v2 in itertools.combinations(vars_jk, 2):
                 bqm.add_quadratic(v1, v2, 2 * penalty_overlap)
 

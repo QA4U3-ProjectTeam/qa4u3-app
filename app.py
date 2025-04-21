@@ -1,6 +1,6 @@
 import streamlit as st
 from qubo import build_qubo
-from solver import solve_qubo
+from solver import solve_qubo, parse_sampleset
 
 
 def main():
@@ -12,42 +12,38 @@ def main():
     slots = st.sidebar.number_input('タイムスロット数', min_value=1, value=5)
 
     if st.sidebar.button('スケジュール作成'):
-        # 入力解析
-        tasks = []  # [(name, type)]形式にパース
-        for line in tasks_input.strip().splitlines():
-            parts = [p.strip() for p in line.split(',')]
-            if len(parts) >= 2:
-                tasks.append((parts[0], parts[1]))
-        people = [p.strip() for p in people_input.strip().splitlines() if p.strip()]
+        try:
+            # 入力解析
+            tasks = []  # [(name, type)]形式にパース
+            for line in tasks_input.strip().splitlines():
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) >= 2:
+                    tasks.append((parts[0], parts[1]))
+            people = [p.strip() for p in people_input.strip().splitlines() if p.strip()]
 
-        if not tasks or not people:
-            st.error('タスクと担当者を正しく入力してください。')
-            return
+            if not tasks or not people:
+                st.error('タスクと担当者を正しく入力してください。')
+                return
 
-        # QUBO定式化と解探索
-        bqm = build_qubo(tasks, people, slots)
-        sampleset = solve_qubo(bqm)
+            # QUBO定式化と解探索
+            with st.spinner('スケジュールを計算中...'):
+                bqm = build_qubo(tasks, people, slots)
+                sampleset = solve_qubo(bqm)
 
-        # 最良サンプル取得
-        best = sampleset.first.sample
-        # スケジュールマッピング
-        schedule = []  # list of dicts for DataFrame
-        for (i, j, k), val in best.items():
-            if val == 1:
-                task_name = tasks[i][0]
-                person = people[j]
-                slot = k + 1
-                schedule.append({'タイムスロット': slot, '担当者': person, 'タスク': task_name})
+            # 結果解析
+            schedule_dict, energy = parse_sampleset(sampleset, tasks, people, slots)
 
-        # 結果表示
-        st.subheader('スケジュール結果')
-        if schedule:
+            # 結果表示
+            st.subheader('スケジュール結果')
             import pandas as pd
-            df = pd.DataFrame(schedule)
-            st.table(df.sort_values(['タイムスロット', '担当者']))
-            st.success(f'最適解エネルギー: {sampleset.first.energy}')
-        else:
-            st.warning('有効なスケジュールが見つかりませんでした。')
+            df = pd.DataFrame(schedule_dict)
+            # タイムスロットを1-basedにし、行ラベルに設定
+            df.index = df.index + 1
+            df.index.name = 'タイムスロット'
+            st.table(df)
+            st.success(f'完了: エネルギー {energy}')
+        except Exception as e:
+            st.error(f'エラーが発生しました: {e}')
 
 
 if __name__ == '__main__':
