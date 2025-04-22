@@ -41,6 +41,7 @@ pip install -r requirements.txt
   ```
 - **macOS/Linux**:
   ```bash
+  chmod +x setup_env.sh
   ./setup_env.sh
   ```
 
@@ -50,7 +51,23 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## プロジェクト構成例
+## ドキュメント一覧
+- **USAGE_GUIDE.md** - 詳細な使用方法と応用テクニックの解説
+- **FAQ.md** - よくある質問と回答
+- **requirements.md** - 要件定義書
+- **ROADMAP.md** - 開発ロードマップと進捗状況
+
+## サンプルデータ
+`samples/` ディレクトリに、アプリケーションのテストに使用できる以下のサンプルデータが含まれています：
+
+- **small_case.txt** - 小規模な基本テストケース
+- **medium_case.txt** - 中規模の実践的テストケース
+- **edge_case.txt** - タスク数が処理能力を超えるエッジケース
+- **context_switch_case.txt** - コンテキストスイッチ効果の検証用ケース
+
+サンプルデータは、アプリケーション内の「サンプルデータを選択」ドロップダウンから利用できます。
+
+## プロジェクト構成
 ```
 qa4u3-app/
 ├── app.py            # Streamlitアプリ本体
@@ -59,8 +76,15 @@ qa4u3-app/
 ├── requirements.txt  # 依存パッケージ一覧
 ├── .gitignore
 ├── README.md
+├── USAGE_GUIDE.md    # 使用方法ガイド
+├── FAQ.md            # よくある質問と回答
+├── ROADMAP.md        # 開発ロードマップ
+├── requirements.md   # 要件定義書
 ├── LICENSE
-└── requirements.md   # 要件定義書
+├── setup_env.bat     # Windows環境構築スクリプト
+├── setup_env.sh      # Linux/Mac環境構築スクリプト
+├── logs/             # 実行ログ
+└── samples/          # サンプルデータ
 ```
 
 ## ライセンス

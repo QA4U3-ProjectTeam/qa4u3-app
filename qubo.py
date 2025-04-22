@@ -1,3 +1,18 @@
+"""
+QA Scheduling Tool MVP - QUBO定式化モジュール
+
+このモジュールは、タスクスケジューリング問題をQUBOモデルに定式化する関数を提供します。
+コンテキストスイッチコストを考慮した最適なスケジュール作成のための基盤となります。
+
+定式化される制約：
+1. 各タスクは1回実行されなければならない
+2. 同一担当者は同時刻に1つ以上のタスクを実行できない
+3. 異なるタイプのタスク間の切り替え（コンテキストスイッチ）にはコストがかかる
+
+主な関数：
+- build_qubo: タスク割り当て問題のQUBOモデルを構築する
+"""
+
 import dimod
 import itertools
 
@@ -8,10 +23,38 @@ def build_qubo(tasks, people, slots,
                penalty_switch=1.0,
                base_cost=0.1):
     """
-    タスクスケジューリング用のQUBOを構築
-    tasks: list of (task_name, task_type)
-    people: list of person_name
-    slots: int (number of time slots)
+    タスクスケジューリング用のQUBOを構築します。
+    
+    パラメータ:
+    ----------
+    tasks : list of (task_name, task_type)
+        タスク名とタスクタイプのタプルのリスト
+    people : list of str
+        担当者名のリスト
+    slots : int
+        タイムスロットの数
+    penalty_task : float, optional (default=5.0)
+        タスク実行回数制約のペナルティ重み
+    penalty_overlap : float, optional (default=5.0)
+        同時実行制約のペナルティ重み
+    penalty_switch : float, optional (default=1.0)
+        コンテキストスイッチ（異なるタイプのタスク間の切り替え）のコスト重み
+    base_cost : float, optional (default=0.1)
+        均一に適用される基本コスト（エネルギー縮退を防止）
+        
+    戻り値:
+    -------
+    bqm : dimod.BinaryQuadraticModel
+        構築されたQUBOモデル
+    
+    変数表現:
+    --------
+    変数は(i, j, k)の3次元インデックスで表され、各要素は以下を意味します:
+    - i: タスクのインデックス (0 to len(tasks)-1)
+    - j: 担当者のインデックス (0 to len(people)-1)
+    - k: タイムスロットのインデックス (0 to slots-1)
+    
+    値が1の場合、タスクiは担当者jによってタイムスロットkで実行されます。
     """
     bqm = dimod.BinaryQuadraticModel({}, {}, 0.0, dimod.BINARY)
     n_tasks = len(tasks)
