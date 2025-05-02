@@ -16,7 +16,7 @@ QA Scheduling Tool MVP - ソルバーモジュール
 import neal
 
 
-def solve_qubo(bqm, num_reads=100):
+def solve_qubo(bqm, num_reads=100, sweeps=1000, beta_range=None):
     """
     Simulated Annealing を用いてQUBOを解きます。
     
@@ -27,6 +27,12 @@ def solve_qubo(bqm, num_reads=100):
     num_reads : int, optional (default=100)
         シミュレーテッドアニーリングの試行回数
         大きい値ほど良い解が見つかる可能性が高まりますが、計算時間も増加します
+    sweeps : int, optional (default=1000)
+        各試行におけるスイープ回数（変数更新の回数）
+        大きい値ほど探索が詳細になりますが、計算時間も増加します
+    beta_range : tuple(float, float), optional (default=None)
+        逆温度パラメータの範囲 (beta_min, beta_max)
+        Noneの場合は、ソルバーがデフォルト値を使用します
         
     戻り値:
     -------
@@ -34,7 +40,18 @@ def solve_qubo(bqm, num_reads=100):
         シミュレーテッドアニーリングの結果。エネルギー順に並べられたサンプルのセット
     """
     sampler = neal.SimulatedAnnealingSampler()
-    sampleset = sampler.sample(bqm, num_reads=num_reads)
+    
+    # シミュレーテッドアニーリングのパラメータを設定
+    params = {'num_reads': num_reads, 'num_sweeps': sweeps}
+    if beta_range is not None:
+        params['beta_range'] = beta_range
+    
+    # 問題サイズに基づいて自動的にスイープ回数を調整
+    num_variables = len(bqm.variables)
+    if num_variables > 500:
+        params['num_sweeps'] = max(sweeps, 2000)  # より多くの変数がある場合、より多くのスイープが必要
+    
+    sampleset = sampler.sample(bqm, **params)
     return sampleset
 
 

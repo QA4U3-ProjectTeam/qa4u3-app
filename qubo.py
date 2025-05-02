@@ -8,6 +8,7 @@ QA Scheduling Tool MVP - QUBO定式化モジュール
 1. 各タスクは1回実行されなければならない
 2. 同一担当者は同時刻に1つ以上のタスクを実行できない
 3. 異なるタイプのタスク間の切り替え（コンテキストスイッチ）にはコストがかかる
+4. タスク種類と担当者の専門性が一致する場合は優先的に割り当てる
 
 主な関数：
 - build_qubo: タスク割り当て問題のQUBOモデルを構築する
@@ -21,6 +22,7 @@ def build_qubo(tasks, people, slots,
                penalty_task=5.0,
                penalty_overlap=5.0,
                penalty_switch=1.0,
+               reward_skill_match=2.0,
                base_cost=0.1):
     """
     タスクスケジューリング用のQUBOを構築します。
@@ -39,6 +41,8 @@ def build_qubo(tasks, people, slots,
         同時実行制約のペナルティ重み
     penalty_switch : float, optional (default=1.0)
         コンテキストスイッチ（異なるタイプのタスク間の切り替え）のコスト重み
+    reward_skill_match : float, optional (default=2.0)
+        タスク種類と担当者の専門性一致の報酬重み
     base_cost : float, optional (default=0.1)
         均一に適用される基本コスト（エネルギー縮退を防止）
         
@@ -95,5 +99,26 @@ def build_qubo(tasks, people, slots,
             for i1, i2 in itertools.product(range(n_tasks), repeat=2):
                 if i1 != i2 and tasks[i1][1] != tasks[i2][1]:
                     bqm.add_quadratic((i1, j, k), (i2, j, k + 1), penalty_switch)
+    
+    # 新しい制約: タスク種類と担当者の専門性のマッチング
+    for i in range(n_tasks):
+        task_name, task_type = tasks[i]
+        task_type_words = [word.strip() for word in task_type.replace('、', ',').split(',')]
+        
+        for j in range(n_people):
+            person_name = people[j]
+            # 担当者名とタスク種類のキーワードがマッチするか確認
+            has_skill_match = False
+            
+            for keyword in task_type_words:
+                if keyword in person_name:
+                    has_skill_match = True
+                    break
+            
+            if has_skill_match:
+                # マッチする場合は、このタスクを担当者jに割り当てることにインセンティブを与える
+                # （エネルギーを減少させるため、負の値を使用）
+                for k in range(slots):
+                    bqm.add_linear((i, j, k), -reward_skill_match)
 
     return bqm

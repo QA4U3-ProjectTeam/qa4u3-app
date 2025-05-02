@@ -236,6 +236,95 @@ def main():
     )
     if slots > 10:
         st.sidebar.warning(f"スロット数が多いと計算時間が長くなる可能性があります（現在: {slots}）")
+    
+    # 詳細設定を表示するための展開可能なセクション
+    with st.sidebar.expander("シミュレーテッドアニーリング詳細設定"):
+        st.caption("これらの設定はシミュレーテッドアニーリングの性能に影響します。デフォルト値でも十分な結果が得られます。")
+        
+        num_reads = st.number_input(
+            '試行回数 (num_reads)', 
+            min_value=10, 
+            max_value=1000, 
+            value=100, 
+            help="多いほど良い解が見つかる可能性が高まりますが、計算時間も増加します"
+        )
+        
+        sweeps = st.number_input(
+            'スイープ回数 (num_sweeps)', 
+            min_value=100, 
+            max_value=10000, 
+            value=1000, 
+            help="1回の試行における変数更新回数。多いほど探索が詳細になりますが、計算時間も増加します"
+        )
+        
+        use_custom_beta = st.checkbox(
+            '逆温度パラメータを手動設定', 
+            value=False, 
+            help="オンにすると温度スケジュールを手動で制御できます"
+        )
+        
+        beta_min = beta_max = None
+        if use_custom_beta:
+            beta_min = st.number_input(
+                '最小逆温度 (beta_min)', 
+                min_value=0.01, 
+                max_value=10.0, 
+                value=0.1, 
+                format="%.2f",
+                help="低い値は高温で、より広い探索を行います"
+            )
+            
+            beta_max = st.number_input(
+                '最大逆温度 (beta_max)', 
+                min_value=1.0, 
+                max_value=50.0, 
+                value=10.0, 
+                format="%.2f",
+                help="高い値は低温で、より局所的な探索を行います"
+            )
+            
+            if beta_min >= beta_max:
+                st.warning("最小逆温度は最大逆温度より小さい値に設定してください")
+    
+    # QUBOパラメータ設定を表示するためのエキスパンダー
+    with st.sidebar.expander("QUBOモデルパラメータ設定"):
+        st.caption("これらの設定はスケジューリングの優先度に影響します。")
+        
+        penalty_task = st.number_input(
+            'タスク実行回数制約 (penalty_task)', 
+            min_value=1.0, 
+            max_value=20.0, 
+            value=5.0, 
+            format="%.1f",
+            help="各タスクを1回だけ実行する制約の重み"
+        )
+        
+        penalty_overlap = st.number_input(
+            '同時実行制約 (penalty_overlap)', 
+            min_value=1.0, 
+            max_value=20.0, 
+            value=5.0, 
+            format="%.1f",
+            help="同じ担当者が同じ時間に複数のタスクを実行できない制約の重み"
+        )
+        
+        penalty_switch = st.number_input(
+            'コンテキストスイッチコスト (penalty_switch)', 
+            min_value=0.1, 
+            max_value=10.0, 
+            value=1.0, 
+            format="%.1f",
+            help="異なるタイプのタスク間の切り替えコストの重み。大きいほど同種タスクを連続して配置します"
+        )
+        
+        reward_skill_match = st.number_input(
+            'スキルマッチング報酬 (reward_skill_match)', 
+            min_value=0.0, 
+            max_value=10.0, 
+            value=2.0, 
+            format="%.1f",
+            help="タスク種類と担当者の専門性が一致する場合の報酬の重み。大きいほど専門性に応じた割り当てになります"
+        )
 
     if st.sidebar.button('スケジュール作成'):
         try:
@@ -252,13 +341,29 @@ def main():
                 return
 
             # 問題サイズのチェック
-            if len(tasks) * len(people) * slots > 1000:
-                st.warning("問題サイズが大きいため、計算に時間がかかる場合があります。")
+            problem_size = len(tasks) * len(people) * slots
+            if problem_size > 1000:
+                st.warning(f"問題サイズが大きいため、計算に時間がかかる場合があります。(変数数: {problem_size})")
 
             # QUBO定式化と解探索
             with st.spinner('スケジュールを計算中...'):
-                bqm = build_qubo(tasks, people, slots)
-                sampleset = solve_qubo(bqm)
+                # 設定したQUBOパラメータを渡す
+                bqm = build_qubo(
+                    tasks, 
+                    people, 
+                    slots,
+                    penalty_task=penalty_task,
+                    penalty_overlap=penalty_overlap,
+                    penalty_switch=penalty_switch,
+                    reward_skill_match=reward_skill_match
+                )
+                
+                # シミュレーテッドアニーリングのパラメータを設定
+                beta_range = None
+                if use_custom_beta and beta_min is not None and beta_max is not None and beta_min < beta_max:
+                    beta_range = (beta_min, beta_max)
+                
+                sampleset = solve_qubo(bqm, num_reads=num_reads, sweeps=sweeps, beta_range=beta_range)
 
             # 結果解析
             schedule_dict, energy = parse_sampleset(sampleset, tasks, people, slots)
@@ -271,7 +376,7 @@ def main():
             df.index = df.index + 1
             df.index.name = 'タイムスロット'
             st.table(df)
-            st.success(f'完了: エネルギー {energy}')
+            st.success(f'完了: エネルギー {energy:.4f}')
             
             # 完了タスク数の確認
             assigned_tasks = set()
@@ -282,6 +387,16 @@ def main():
             
             if len(assigned_tasks) < len(tasks):
                 st.warning(f"注意: 全てのタスクが割り当てられていません。（割当: {len(assigned_tasks)}/{len(tasks)}）")
+                st.info("タスク数がタイムスロット数×担当者数より多い場合、全てのタスクを割り当てることはできません。")
+            
+            # 使用した計算設定の表示
+            st.subheader("計算設定")
+            st.markdown(f"""
+            - **問題サイズ**: {problem_size} 変数 ({len(tasks)} タスク × {len(people)} 担当者 × {slots} スロット)
+            - **試行回数**: {num_reads}
+            - **スイープ回数**: {sweeps}
+            - **逆温度範囲**: {"カスタム設定" if beta_range else "デフォルト"}
+            """)
                 
         except Exception as e:
             st.error(f'エラーが発生しました: {e}')
