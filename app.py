@@ -187,6 +187,47 @@ def main():
 
     st.sidebar.header('入力')
     
+    # --- Excel アップロード -------------------------------------------------
+    uploaded_file = st.sidebar.file_uploader(
+        "Excel (QA4U3.xlsx など) をアップロード",
+        type=["xlsx", "xls", "csv"]
+    )
+
+    if uploaded_file is not None:
+        import pandas as pd
+
+        try:
+            # 期待フォーマット:
+            #   シート "Tasks":   Task, Type
+            #   シート "People":  Name
+            #   シート "Config":  Key | Value  （例: Slots | 5）
+            if uploaded_file.name.endswith('.csv'):
+                # CSVファイルの場合
+                df_tasks = pd.read_csv(uploaded_file)
+                tasks = list(zip(df_tasks.iloc[:, 0], df_tasks.iloc[:, 1]))
+                people = []
+                slots = 5  # デフォルト値
+            else:
+                # Excelファイルの場合
+                xl = pd.ExcelFile(uploaded_file)
+
+                df_tasks = xl.parse("Tasks")
+                df_people = xl.parse("People")
+                df_conf = xl.parse("Config")
+
+                tasks = list(df_tasks.itertuples(index=False, name=None))  # [(Task, Type), ...]
+                people = df_people["Name"].dropna().tolist()
+                slots = int(df_conf.query("Key == 'Slots'")["Value"].iloc[0])
+
+            # テキストエリアへ反映して既存バリデータを再利用
+            st.session_state["tasks_input"] = "\n".join(f"{t},{ty}" for t, ty in tasks)
+            st.session_state["people_input"] = "\n".join(people)
+            st.session_state["slots"] = slots
+
+            st.success(f"ファイルを読み込みました: タスク {len(tasks)} 件, 担当者 {len(people)} 名, スロット {slots}")
+        except Exception as e:
+            st.error(f"ファイル読込に失敗しました: {e}")
+    
     # サンプルデータ選択オプション
     sample_files = glob.glob(os.path.join('samples', '*.txt'))
     if sample_files:
@@ -377,6 +418,12 @@ def main():
             df.index.name = 'タイムスロット'
             st.table(df)
             st.success(f'完了: エネルギー {energy:.4f}')
+            
+            # CSV ダウンロード機能
+            if st.button("結果を CSV でダウンロード"):
+                import io
+                csv = df.to_csv(index=True).encode("utf-8")
+                st.download_button("Download schedule.csv", data=csv, file_name="schedule.csv", mime="text/csv")
             
             # 完了タスク数の確認
             assigned_tasks = set()
