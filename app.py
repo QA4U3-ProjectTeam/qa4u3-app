@@ -82,6 +82,153 @@ def load_sample_data(sample_file):
     return tasks, people, slots
 
 
+def load_csv_data(csv_file):
+    """
+    CSVファイルからタスク、担当者、スロット情報を読み込みます。
+    1つのCSVファイル内の各セクションを識別して読み込みます。
+    
+    パラメータ:
+    ----------
+    csv_file : file object
+        CSVファイルオブジェクト
+        
+    戻り値:
+    -------
+    tasks : list of (task_name, task_type)
+        タスク名とタスクタイプのタプルのリスト
+    people : list of str
+        担当者名のリスト
+    slots : int
+        タイムスロットの数
+    """
+    import pandas as pd
+    import io
+    
+    # ファイル内容を読み込む
+    content = csv_file.read()
+    if isinstance(content, bytes):
+        content = content.decode('utf-8')
+    
+    # 初期値設定
+    tasks = []
+    people = []
+    slots = 5  # デフォルト値
+    
+    # セクション分けのためのマーカー
+    section = None
+    lines = content.splitlines()
+    
+    # テンポラリストレージ
+    section_data = {
+        "tasks": [],
+        "people": [],
+        "config": []
+    }
+    
+    for line in lines:
+        line = line.strip()
+        # 空行はスキップ
+        if not line:
+            continue
+            
+        # セクションマーカーをチェック - 大文字小文字を区別せず、空白も許容
+        line_lower = line.lower()
+        if "[tasks]" in line_lower or "#tasks" in line_lower:
+            section = "tasks"
+            continue
+        elif "[people]" in line_lower or "#people" in line_lower:
+            section = "people"
+            continue
+        elif "[config]" in line_lower or "#config" in line_lower:
+            section = "config"
+            continue
+        
+        # 有効なセクションの場合、データを保存
+        if section in section_data:
+            section_data[section].append(line)
+    
+    # セクションデータが空の場合（標準CSVフォーマット）
+    if not any(section_data.values()):
+        # 従来の方法：最初の列をタスク名、2番目の列をタスク種類として扱う
+        df = pd.read_csv(io.StringIO(content))
+        if len(df.columns) >= 2:
+            tasks = list(zip(df.iloc[:, 0], df.iloc[:, 1]))
+        return tasks, people, slots
+    
+    # タスクデータの処理
+    if section_data["tasks"]:
+        try:
+            # 先頭行がヘッダーかどうかを確認
+            task_lines = section_data["tasks"]
+            header_line = task_lines[0].lower() if task_lines else ""
+            
+            if "タスク名" in header_line and "タスク種類" in header_line:
+                # ヘッダー行がある場合、2行目以降を処理
+                for line in task_lines[1:]:
+                    if ',' in line:
+                        parts = line.split(',')
+                        if len(parts) >= 2:
+                            task_name = parts[0].strip()
+                            task_type = parts[1].strip()
+                            if task_name and task_type:
+                                tasks.append((task_name, task_type))
+            else:
+                # ヘッダーがない場合、すべての行を処理
+                for line in task_lines:
+                    if ',' in line:
+                        parts = line.split(',')
+                        if len(parts) >= 2:
+                            task_name = parts[0].strip()
+                            task_type = parts[1].strip()
+                            if task_name and task_type:
+                                tasks.append((task_name, task_type))
+        except Exception as e:
+            print(f"タスクデータ処理中にエラー: {e}")
+            # 例外発生時のフォールバック処理
+            for line in section_data["tasks"]:
+                if line.startswith('#') or ',' not in line:  # コメント行やヘッダー行（カンマがない）はスキップ
+                    continue
+                parts = line.split(',')
+                if len(parts) >= 2:
+                    task_name = parts[0].strip()
+                    task_type = parts[1].strip()
+                    if task_name and task_type and not (task_name.lower() == "タスク名" and task_type.lower() == "タスク種類"):
+                        tasks.append((task_name, task_type))
+    
+    # 担当者データの処理
+    for line in section_data["people"]:
+        # コメント行はスキップ
+        if line.startswith('#'):
+            continue
+        parts = line.split(',')
+        person = parts[0].strip()
+        if person:
+            people.append(person)
+    
+    # 設定データの処理
+    for line in section_data["config"]:
+        # コメント行はスキップ
+        if line.startswith('#'):
+            continue
+        parts = line.split(',')
+        if len(parts) >= 2:
+            key = parts[0].strip()
+            value = parts[1].strip()
+            if key.lower() == "slots":
+                try:
+                    slots = int(value)
+                except ValueError:
+                    pass
+    
+    # デバッグ情報
+    print(f"タスクデータ行数: {len(section_data['tasks']) if 'tasks' in section_data else 0}")
+    print(f"読み込まれたタスク数: {len(tasks)}")
+    print(f"読み込まれた担当者数: {len(people)}")
+    print(f"設定されたスロット数: {slots}")
+    
+    return tasks, people, slots
+
+
 def validate_tasks(tasks_input):
     """
     タスク入力のバリデーションを行い、問題があればエラーメッセージを返します。
@@ -202,11 +349,8 @@ def main():
             #   シート "People":  Name
             #   シート "Config":  Key | Value  （例: Slots | 5）
             if uploaded_file.name.endswith('.csv'):
-                # CSVファイルの場合
-                df_tasks = pd.read_csv(uploaded_file)
-                tasks = list(zip(df_tasks.iloc[:, 0], df_tasks.iloc[:, 1]))
-                people = []
-                slots = 5  # デフォルト値
+                # CSVファイルの場合 - 拡張形式に対応
+                tasks, people, slots = load_csv_data(uploaded_file)
             else:
                 # Excelファイルの場合
                 xl = pd.ExcelFile(uploaded_file)
@@ -220,6 +364,7 @@ def main():
                 slots = int(df_conf.query("Key == 'Slots'")["Value"].iloc[0])
 
             # テキストエリアへ反映して既存バリデータを再利用
+            st.session_state["tasks_input"] = "\n".join(f"{t},{ty}" for t, ty in tasks)
             st.session_state["tasks_input"] = "\n".join(f"{t},{ty}" for t, ty in tasks)
             st.session_state["people_input"] = "\n".join(people)
             st.session_state["slots"] = slots
