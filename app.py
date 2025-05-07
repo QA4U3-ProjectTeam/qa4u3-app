@@ -564,11 +564,10 @@ def main():
             st.table(df)
             st.success(f'完了: エネルギー {energy:.4f}')
             
-            # CSV ダウンロード機能
-            if st.button("結果を CSV でダウンロード"):
-                import io
-                csv = df.to_csv(index=True).encode("utf-8")
-                st.download_button("Download schedule.csv", data=csv, file_name="schedule.csv", mime="text/csv")
+            # CSV ダウンロード機能（常に表示）
+            import io
+            csv = df.to_csv(index=True).encode("utf-8")
+            st.download_button("スケジュール結果をCSVでダウンロード", data=csv, file_name="schedule.csv", mime="text/csv")
             
             # 完了タスク数の確認
             assigned_tasks = set()
